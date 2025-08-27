@@ -1,26 +1,46 @@
-# Anime Prompt Generator Publishing Script
+# Game Publishing Script
 # Publishes frontend and PHP backend to F:\WebHatchery for server sync
 
 param(
+    [Alias('f')]
     [switch]$Frontend,
+    [Alias('b')]
     [switch]$Backend,
+    [Alias('a')]
     [switch]$All,
+    [Alias('c')]
     [switch]$Clean,
+    [Alias('v')]
     [switch]$Verbose,
-    [ValidateSet('preview', 'production')]
-    [string]$Environment = 'preview'
+    [Alias('p')]
+    [switch]$Production
 )
 
-# Configuration
-$SOURCE_DIR = "H:\WebHatchery\apps\anime_prompt_gen"
-$PREVIEW_ROOT = "H:\xampp\htdocs"
-$PRODUCTION_ROOT = "F:\WebHatchery"
+# Auto-detect project name from current directory
+$PROJECT_NAME = Split-Path -Leaf $PSScriptRoot
 
-# Set destination based on environment
-$DEST_ROOT = if ($Environment -eq 'preview') { $PREVIEW_ROOT } else { $PRODUCTION_ROOT }
-$DEST_DIR = Join-Path $DEST_ROOT "anime_prompt_gen"
-$FRONTEND_SRC = "$SOURCE_DIR\frontend"
-$BACKEND_SRC = "$SOURCE_DIR\backend"
+# Load .env file
+$envFile = Join-Path $PSScriptRoot ".env"
+if (Test-Path $envFile) {
+    Get-Content $envFile | ForEach-Object {
+        if ($_ -match "^(\w+)=(.*)$") {
+            $name = $matches[1]
+            $value = $matches[2]
+            Set-Variable -Name $name -Value $value -Scope Script
+        }
+    }
+} else {
+    Write-Error ".env file not found! Please create a .env file in the project root with the following content:"
+    Write-Host "PREVIEW_ROOT=" -ForegroundColor Yellow
+    Write-Host "PRODUCTION_ROOT=" -ForegroundColor Yellow
+    exit 1
+}
+
+# Set destination based on Production flag
+$DEST_ROOT = if ($Production) { $PRODUCTION_ROOT } else { $PREVIEW_ROOT }
+$DEST_DIR = Join-Path $DEST_ROOT $PROJECT_NAME
+$FRONTEND_SRC = "$PSScriptRoot\frontend"
+$BACKEND_SRC = "$PSScriptRoot\backend"
 $FRONTEND_DEST = $DEST_DIR  # Frontend goes to root, not subdirectory
 $BACKEND_DEST = "$DEST_DIR\backend"
 
@@ -122,8 +142,9 @@ function Build-Frontend {
     }
     
     # Set up environment configuration
-    Write-Info "Setting up $Environment environment for frontend build..."
-    $envSrc = ".env.$Environment"
+    $environment = if ($Production) { "production" } else { "preview" }
+    Write-Info "Setting up $environment environment for frontend build..."
+    $envSrc = ".env.$environment"
     $envTemp = ".env.local"
     
     if (Test-Path $envSrc) {
@@ -138,16 +159,16 @@ function Build-Frontend {
     Write-Info "Building frontend for production..."
     $env:NODE_ENV = "production"
     
-    # Set base path for preview environment (anime_prompt_gen subdirectory)
-    if ($Environment -eq 'preview') {
-        Write-Info "Setting base path for preview environment..."
-        $env:VITE_BASE_PATH = "/anime_prompt_gen/"
-        # Build with preview mode to use .env.preview
-        npx vite build --mode preview
-    } else {
+    # Set base path based on environment
+    if ($Production) {
         # Production uses root path
         $env:VITE_BASE_PATH = "/"
         npx vite build --mode production
+    } else {
+        Write-Info "Setting base path for preview environment..."
+        $env:VITE_BASE_PATH = "/$PROJECT_NAME/"
+        # Build with preview mode to use .env.preview
+        npx vite build --mode preview
     }
     
     $buildResult = $LASTEXITCODE
@@ -280,26 +301,36 @@ function Publish-Backend {
         "vendor\*\.git\*",
         "*.md",
         "composer.lock",
-        "phpunit.xml"
+        "phpunit.xml",
+        "init-db.ps1",
+        "debug_bet.php",
+        "debug_bet_api.php",
+        "test-di.php",
+        "install.php",
+        "NODE_TO_PHP_MIGRATION_GUIDE.md",
+        "DI_IMPLEMENTATION.md",
+        "improvement.md",
+        "codereview.md"
     )
     
     # Copy backend files with exclusions
     Copy-WithExclusions $BACKEND_SRC $BACKEND_DEST $excludePatterns
     
     # Handle environment configuration file
-    Write-Info "Setting up $Environment environment configuration..."
-    $envSrc = "$BACKEND_SRC\.env.$Environment"
+    $environment = if ($Production) { "production" } else { "preview" }
+    Write-Info "Setting up $environment environment configuration..."
+    $envSrc = "$BACKEND_SRC\.env.$environment"
     $envDest = "$BACKEND_DEST\.env"
     
     if (Test-Path $envSrc) {
         Copy-Item $envSrc $envDest -Force
-        Write-Success "Copied $envSrc to .env for $Environment use"
+        Write-Success "Copied $envSrc to .env for $environment use"
     } else {
         Write-Warning "$envSrc not found in source - copying base .env file"
         $baseEnvSrc = "$BACKEND_SRC\.env"
         if (Test-Path $baseEnvSrc) {
             Copy-Item $baseEnvSrc $envDest -Force
-            Write-Info "Copied base .env file to $Environment deployment"
+            Write-Info "Copied base .env file to $environment deployment"
         } else {
             Write-Error "No .env file found in source directory!"
             return $false
@@ -332,8 +363,8 @@ function Publish-Backend {
 
 # Main execution
 function Main {
-    Write-Info "Anime Prompt Generator Publishing Script"
-    Write-Info "======================================="
+    Write-Info "$PROJECT_NAME Publishing Script"
+    Write-Info "=========================="
     
     # Ensure WebHatchery directory exists
     Ensure-Directory $DEST_DIR
@@ -391,38 +422,38 @@ function Main {
 # Show help
 function Show-Help {
     Write-Host @"
-Anime Prompt Generator Publishing Script
-========================================
+$PROJECT_NAME Publishing Script
+==========================
 
 Usage: .\publish.ps1 [OPTIONS]
 
 OPTIONS:
-    -Frontend    Publish only the frontend
-    -Backend     Publish only the PHP backend  
-    -All         Publish both (default if no specific option given)
-    -Clean       Clean destination directories before publishing
-    -Verbose     Show detailed output during copying
-    -Environment Choose deployment environment ('preview' or 'production')
-                 preview: Deploy to H:\xampp\htdocs
-                 production: Deploy to F:\WebHatchery
-    -Help        Show this help message
+    -Frontend, -f    Publish only the frontend
+    -Backend, -b     Publish only the PHP backend  
+    -All, -a         Publish both (default if no specific option given)
+    -Clean, -c       Clean destination directories before publishing
+    -Verbose, -v     Show detailed output during copying
+    -Production, -p  Deploy to production environment (F:\WebHatchery)
+                     Default: Deploy to preview environment (H:\xampp\htdocs)
+    -Help            Show this help message
 
 EXAMPLES:
     .\publish.ps1                                       # Publish both to preview (H:\xampp\htdocs)
-    .\publish.ps1 -Frontend                            # Publish only frontend to preview
-    .\publish.ps1 -Backend                             # Publish only backend to preview
-    .\publish.ps1 -All -Clean -Environment production  # Clean and publish both to production
-    .\publish.ps1 -Frontend -Verbose -Environment preview # Publish frontend to preview with details
+    .\publish.ps1 -f                                   # Publish only frontend to preview
+    .\publish.ps1 -b                                   # Publish only backend to preview
+    .\publish.ps1 -f -p                               # Publish frontend to production
+    .\publish.ps1 -a -c -p                            # Clean and publish both to production
+    .\publish.ps1 -Frontend -Verbose -Production       # Publish frontend to production with details
 
 DESCRIPTION:
-    This script builds and publishes the Anime Prompt Generator to either the 
+    This script builds and publishes the $PROJECT_NAME web game to either the 
     preview environment (H:\xampp\htdocs) or production environment (F:\WebHatchery).
     The frontend is built using npm and deployed to the root directory, while
     the PHP backend is deployed to the backend/ subdirectory with dependencies
     optimized for the target environment.
     
     Deployment Structure (for both environments):
-    <root>\anime_prompt_gen\
+    <root>\$PROJECT_NAME\
     ├── index.html          # Frontend files (root)
     ├── assets\             # Frontend assets
     └── backend\            # PHP backend
