@@ -226,7 +226,7 @@ export const useStoryStore = create<StoryStore>()(
           },
         }),
 
-      endWritingSession: (wordsAdded, notes = '') =>
+      endWritingSession: (wordsAdded, _notes = '') =>
         set((state) => {
           if (!state.currentWritingSession) return state;
 
