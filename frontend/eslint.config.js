@@ -82,6 +82,7 @@ export default tseslint.config(
   {
     files: [
       "test/**/*.{ts,tsx}",
+      "tests/**/*.{ts,tsx}",
       "src/test/**/*.{ts,tsx}",
       "**/*.test.{ts,tsx}",
     ],
