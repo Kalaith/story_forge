@@ -48,3 +48,5 @@ Thumbs.db
 # Package-lock files (uncomment if you want to include them)
 # package-lock.json
 # yarn.lock
+
+**/.env*

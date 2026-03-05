@@ -80,3 +80,4 @@ phpunit.phar
 # Local configuration overrides
 config/local.php
 config/development.php
+**/.env*
