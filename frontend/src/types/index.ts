@@ -31,6 +31,7 @@ export interface Story {
 }
 
 export interface WritingSample {
+  id?: string | number;
   userId: number;
   storyId: number;
   content: string;

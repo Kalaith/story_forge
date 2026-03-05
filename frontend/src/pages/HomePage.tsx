@@ -1,26 +1,50 @@
 import React, { useState, useEffect } from 'react';
-import { apiService } from '../services/apiService';
+import { storyApi, PublicStory } from '../services/api';
 import StoryCard from '../components/StoryCard';
-import type { Story } from '../types';
 import { useNavigate } from 'react-router-dom';
+import type { Story as LegacyStory } from '../types';
 
 interface HomePageProps {
   showToast: (message: string, type?: 'success' | 'error' | 'warning') => void;
 }
 
 const HomePage: React.FC<HomePageProps> = (/*{ showToast }*/) => {
-  const [stories, setStories] = useState<Story[]>([]);
-  const [filteredStories, setFilteredStories] = useState<Story[]>([]);
+  const [stories, setStories] = useState<PublicStory[]>([]);
+  const [filteredStories, setFilteredStories] = useState<PublicStory[]>([]);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string>('');
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [genreFilter, setGenreFilter] = useState<string>('');
   const [accessFilter, setAccessFilter] = useState<string>('');
-  const genres = apiService.getGenres();
+  const genres = Array.from(new Set(stories.map(story => story.genre))).sort();
   const navigate = useNavigate();
 
   useEffect(() => {
-    const allStories = apiService.getStories();
-    setStories(allStories);
-    setFilteredStories(allStories);
+    let mounted = true;
+
+    const loadStories = async () => {
+      setIsLoading(true);
+      setError('');
+      try {
+        const allStories = await storyApi.listPublic();
+        if (!mounted) return;
+        setStories(allStories);
+        setFilteredStories(allStories);
+      } catch (err) {
+        if (!mounted) return;
+        const message = err instanceof Error ? err.message : 'Failed to load stories';
+        setError(message);
+      } finally {
+        if (mounted) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    loadStories();
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   useEffect(() => {
@@ -44,8 +68,8 @@ const HomePage: React.FC<HomePageProps> = (/*{ showToast }*/) => {
     setFilteredStories(currentFilteredStories);
   }, [searchTerm, genreFilter, accessFilter, stories]);
 
-  const handleStoryClick = (story: Story) => {
-    navigate(`/story/${story.id}`);
+  const handleStoryClick = (story: PublicStory | LegacyStory) => {
+    navigate(`/story/${String(story.id)}`);
   };
 
   return (
@@ -87,7 +111,11 @@ const HomePage: React.FC<HomePageProps> = (/*{ showToast }*/) => {
           <button className="btn btn--primary" onClick={() => navigate('/create-story')}>Create New Story</button>
         </div>
         <div className="stories-grid">
-          {filteredStories.length > 0 ? (
+          {isLoading ? (
+            <div className="empty-state"><h3>Loading stories...</h3></div>
+          ) : error ? (
+            <div className="empty-state"><h3>Unable to load stories</h3><p>{error}</p></div>
+          ) : filteredStories.length > 0 ? (
             filteredStories.map(story => (
               <StoryCard key={story.id} story={story} onClick={handleStoryClick} />
             ))

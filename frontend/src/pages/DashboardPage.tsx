@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import StoryCard from '../components/StoryCard';
+import StoryCard, { StoryCardStory } from '../components/StoryCard';
 import type { Story, Paragraph } from '../types';
 import { useNavigate } from 'react-router-dom';
 
@@ -15,12 +15,12 @@ const DashboardPage: React.FC<DashboardPageProps> = (/*{ showToast }*/) => {
   const [storiesToManage] = useState<Story[]>([]);
 
   
-  const handleStoryClick = (story: Story) => {
-    navigate(`/story/${story.id}`);
+  const handleStoryClick = (story: StoryCardStory) => {
+    navigate(`/story/${String(story.id)}`);
   };
 
-  const handleManageStoryClick = (story: Story) => {
-    navigate(`/manage-story/${story.id}`);
+  const handleManageStoryClick = (story: StoryCardStory) => {
+    navigate(`/manage-story/${String(story.id)}`);
   };
 
   return (

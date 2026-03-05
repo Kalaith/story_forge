@@ -1,9 +1,10 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { Story, User, Paragraph, WritingSample } from '../types';
+import { storyApi, paragraphApi, writingSampleApi } from '../services/api';
 
 export interface WritingSession {
-  storyId: number;
+  storyId: number | string;
   startTime: Date;
   endTime?: Date;
   wordCount: number;
@@ -35,49 +36,46 @@ interface StoryState {
     showWordCount: boolean;
     darkMode: boolean;
   };
+  isLoading: boolean;
+  error: string | null;
 }
 
 interface StoryActions {
   // Story management
-  createStory: (story: Omit<Story, 'id' | 'createdDate' | 'paragraphs'>) => void;
-  updateStory: (storyId: number, updates: Partial<Story>) => void;
-  deleteStory: (storyId: number) => void;
+  fetchStories: () => Promise<void>;
+  fetchStory: (storyId: string) => Promise<void>;
+  createStory: (story: { title: string; genre: string; description: string; accessLevel: string; requireExamples: boolean }) => Promise<void>;
+  updateStory: (storyId: string, updates: Partial<Story>) => Promise<void>;
+  deleteStory: (storyId: string) => Promise<void>;
   setCurrentStory: (story: Story | null) => void;
-  loadUserStories: (stories: Story[]) => void;
-  
+
   // Paragraph management
-  addParagraph: (storyId: number, paragraph: Omit<Paragraph, 'id' | 'timestamp'>) => void;
-  updateParagraph: (storyId: number, paragraphId: number, content: string) => void;
-  deleteParagraph: (storyId: number, paragraphId: number) => void;
-  
+  addParagraph: (storyId: string, content: string) => Promise<void>;
+  deleteParagraph: (storyId: string, paragraphId: string) => Promise<void>;
+
   // User management
   setUser: (user: User | null) => void;
-  
+
   // Writing sessions
-  startWritingSession: (storyId: number, goalWords?: number) => void;
+  startWritingSession: (storyId: string | number, goalWords?: number) => void;
   endWritingSession: (wordsAdded: number, notes?: string) => void;
   updateSessionProgress: (wordCount: number) => void;
-  
+
   // Writing samples
-  submitWritingSample: (sample: Omit<WritingSample, 'submittedDate' | 'status'>) => void;
-  updateWritingSampleStatus: (userId: number, storyId: number, status: WritingSample['status']) => void;
-  
-  // Analytics
+  fetchWritingSamples: (storyId: string) => Promise<void>;
+  submitWritingSample: (storyId: string, content: string) => Promise<void>;
+  reviewWritingSample: (sampleId: string, status: 'approved' | 'rejected') => Promise<void>;
+
+  // Analytics & Preferences
   updateDailyWordCount: (words: number) => void;
   incrementStreak: () => void;
   resetStreak: () => void;
-  
-  // Preferences
   updatePreferences: (preferences: Partial<StoryState['preferences']>) => void;
-  
-  // Utility
-  getStoryWordCount: (storyId: number) => number;
+  getStoryWordCount: (storyId: string | number) => number;
   clearAll: () => void;
 }
 
 type StoryStore = StoryState & StoryActions;
-
-const generateId = () => Math.floor(Math.random() * 1000000);
 
 const defaultAnalytics: WritingAnalytics = {
   dailyWordCount: 0,
@@ -107,113 +105,165 @@ export const useStoryStore = create<StoryStore>()(
       currentWritingSession: null,
       analytics: { ...defaultAnalytics },
       preferences: { ...defaultPreferences },
+      isLoading: false,
+      error: null,
 
-      // Story Management
-      createStory: (storyData) =>
-        set((state) => {
-          const newStory: Story = {
-            ...storyData,
-            id: generateId(),
-            createdDate: new Date().toISOString(),
-            paragraphs: [],
-          };
-          return {
+      // Async Story Management
+      fetchStories: async () => {
+        set({ isLoading: true, error: null });
+        try {
+          const stories = await storyApi.list() as Story[];
+          set({ stories, isLoading: false });
+        } catch (error: any) {
+          set({ error: error.message, isLoading: false });
+        }
+      },
+
+      fetchStory: async (storyId) => {
+        set({ isLoading: true, error: null });
+        try {
+          const story = await storyApi.get(storyId) as Story;
+          set({ currentStory: story, isLoading: false });
+        } catch (error: any) {
+          set({ error: error.message, isLoading: false });
+        }
+      },
+
+      createStory: async (storyData) => {
+        set({ isLoading: true, error: null });
+        try {
+          const newStory = await storyApi.create(storyData) as Story;
+          set((state) => ({
             stories: [...state.stories, newStory],
             currentStory: newStory,
-          };
-        }),
+            isLoading: false
+          }));
+        } catch (error: any) {
+          set({ error: error.message, isLoading: false });
+          throw error;
+        }
+      },
 
-      updateStory: (storyId, updates) =>
-        set((state) => {
-          const updatedStories = state.stories.map(story =>
-            story.id === storyId ? { ...story, ...updates } : story
-          );
-          return {
-            stories: updatedStories,
-            currentStory: state.currentStory?.id === storyId 
-              ? updatedStories.find(s => s.id === storyId) || null
-              : state.currentStory,
-          };
-        }),
+      updateStory: async (storyId, updates) => {
+        set({ isLoading: true, error: null });
+        try {
+          const updatedStory = await storyApi.update(storyId, updates as any) as Story;
+          set((state) => ({
+            stories: state.stories.map(s => s.id === updatedStory.id ? updatedStory : s),
+            currentStory: state.currentStory?.id === updatedStory.id ? updatedStory : state.currentStory,
+            isLoading: false
+          }));
+        } catch (error: any) {
+          set({ error: error.message, isLoading: false });
+          throw error;
+        }
+      },
 
-      deleteStory: (storyId) =>
-        set((state) => ({
-          stories: state.stories.filter(s => s.id !== storyId),
-          currentStory: state.currentStory?.id === storyId ? null : state.currentStory,
-          writingSamples: state.writingSamples.filter(ws => ws.storyId !== storyId),
-        })),
+      deleteStory: async (storyId) => {
+        set({ isLoading: true, error: null });
+        try {
+          await storyApi.delete(storyId);
+          set((state) => ({
+            stories: state.stories.filter(s => String(s.id) !== String(storyId)),
+            currentStory: String(state.currentStory?.id) === String(storyId) ? null : state.currentStory,
+            writingSamples: state.writingSamples.filter(ws => String(ws.storyId) !== String(storyId)),
+            isLoading: false
+          }));
+        } catch (error: any) {
+          set({ error: error.message, isLoading: false });
+          throw error;
+        }
+      },
 
       setCurrentStory: (story) => set({ currentStory: story }),
 
-      loadUserStories: (stories) => set({ stories }),
+      // Async Paragraph Management
+      addParagraph: async (storyId, content) => {
+        set({ isLoading: true, error: null });
+        try {
+          const newParagraph = await paragraphApi.add(storyId, content) as Paragraph;
+          set((state) => {
+            const updatedStory = state.currentStory && String(state.currentStory.id) === String(storyId)
+              ? { ...state.currentStory, paragraphs: [...(state.currentStory.paragraphs || []), newParagraph] }
+              : state.currentStory;
+            return {
+              currentStory: updatedStory,
+              stories: state.stories.map(s => String(s.id) === String(storyId) && updatedStory ? updatedStory : s),
+              isLoading: false
+            };
+          });
+        } catch (error: any) {
+          set({ error: error.message, isLoading: false });
+          throw error;
+        }
+      },
 
-      // Paragraph Management
-      addParagraph: (storyId, paragraphData) =>
-        set((state) => {
-          const newParagraph: Paragraph = {
-            ...paragraphData,
-            id: generateId(),
-            timestamp: new Date().toISOString(),
-          };
-
-          const updatedStories = state.stories.map(story =>
-            story.id === storyId
-              ? { ...story, paragraphs: [...story.paragraphs, newParagraph] }
-              : story
-          );
-
-          return {
-            stories: updatedStories,
-            currentStory: state.currentStory?.id === storyId
-              ? updatedStories.find(s => s.id === storyId) || null
-              : state.currentStory,
-          };
-        }),
-
-      updateParagraph: (storyId, paragraphId, content) =>
-        set((state) => {
-          const updatedStories = state.stories.map(story =>
-            story.id === storyId
+      deleteParagraph: async (storyId, paragraphId) => {
+        set({ isLoading: true, error: null });
+        try {
+          await paragraphApi.delete(storyId, paragraphId);
+          set((state) => {
+            const updatedStory = state.currentStory && String(state.currentStory.id) === String(storyId)
               ? {
-                  ...story,
-                  paragraphs: story.paragraphs.map(p =>
-                    p.id === paragraphId ? { ...p, content } : p
-                  ),
-                }
-              : story
-          );
-
-          return {
-            stories: updatedStories,
-            currentStory: state.currentStory?.id === storyId
-              ? updatedStories.find(s => s.id === storyId) || null
-              : state.currentStory,
-          };
-        }),
-
-      deleteParagraph: (storyId, paragraphId) =>
-        set((state) => {
-          const updatedStories = state.stories.map(story =>
-            story.id === storyId
-              ? {
-                  ...story,
-                  paragraphs: story.paragraphs.filter(p => p.id !== paragraphId),
-                }
-              : story
-          );
-
-          return {
-            stories: updatedStories,
-            currentStory: state.currentStory?.id === storyId
-              ? updatedStories.find(s => s.id === storyId) || null
-              : state.currentStory,
-          };
-        }),
+                ...state.currentStory,
+                paragraphs: state.currentStory.paragraphs.filter(p => String(p.id) !== String(paragraphId)),
+              }
+              : state.currentStory;
+            return {
+              currentStory: updatedStory,
+              stories: state.stories.map(s => String(s.id) === String(storyId) && updatedStory ? (updatedStory as Story) : s),
+              isLoading: false
+            };
+          });
+        } catch (error: any) {
+          set({ error: error.message, isLoading: false });
+          throw error;
+        }
+      },
 
       // User Management
       setUser: (user) => set({ user }),
 
-      // Writing Sessions
+      // Async Writing Samples
+      fetchWritingSamples: async (storyId) => {
+        set({ isLoading: true, error: null });
+        try {
+          const writingSamples = await writingSampleApi.getByStory(storyId) as WritingSample[];
+          set({ writingSamples, isLoading: false });
+        } catch (error: any) {
+          set({ error: error.message, isLoading: false });
+        }
+      },
+
+      submitWritingSample: async (storyId, content) => {
+        set({ isLoading: true, error: null });
+        try {
+          const newSample = await writingSampleApi.submit(storyId, content) as WritingSample;
+          set((state) => ({
+            writingSamples: [...state.writingSamples, newSample],
+            isLoading: false
+          }));
+        } catch (error: any) {
+          set({ error: error.message, isLoading: false });
+          throw error;
+        }
+      },
+
+      reviewWritingSample: async (sampleId, status) => {
+        set({ isLoading: true, error: null });
+        try {
+          const updatedSample = await writingSampleApi.review(sampleId, status) as WritingSample;
+          set((state) => ({
+            writingSamples: state.writingSamples.map(ws => String(ws.id) === String(sampleId) ? updatedSample : ws),
+            isLoading: false
+          }));
+        } catch (error: any) {
+          set({ error: error.message, isLoading: false });
+          throw error;
+        }
+      },
+
+      // Writing Sessions (Kept local, just state tracking)
       startWritingSession: (storyId, goalWords = 500) =>
         set({
           currentWritingSession: {
@@ -233,7 +283,6 @@ export const useStoryStore = create<StoryStore>()(
           const endTime = new Date();
           const sessionLength = endTime.getTime() - state.currentWritingSession.startTime.getTime();
 
-          // Update analytics
           const updatedAnalytics = {
             ...state.analytics,
             dailyWordCount: state.analytics.dailyWordCount + wordsAdded,
@@ -251,38 +300,16 @@ export const useStoryStore = create<StoryStore>()(
         set((state) =>
           state.currentWritingSession
             ? {
-                currentWritingSession: {
-                  ...state.currentWritingSession,
-                  wordCount,
-                  wordsAdded: wordCount - state.currentWritingSession.wordCount,
-                },
-              }
+              currentWritingSession: {
+                ...state.currentWritingSession,
+                wordCount,
+                wordsAdded: wordCount - state.currentWritingSession.wordCount,
+              },
+            }
             : state
         ),
 
-      // Writing Samples
-      submitWritingSample: (sampleData) =>
-        set((state) => {
-          const newSample: WritingSample = {
-            ...sampleData,
-            submittedDate: new Date().toISOString(),
-            status: 'pending',
-          };
-          return {
-            writingSamples: [...state.writingSamples, newSample],
-          };
-        }),
-
-      updateWritingSampleStatus: (userId, storyId, status) =>
-        set((state) => ({
-          writingSamples: state.writingSamples.map(ws =>
-            ws.userId === userId && ws.storyId === storyId
-              ? { ...ws, status }
-              : ws
-          ),
-        })),
-
-      // Analytics
+      // Analytics & Preferences
       updateDailyWordCount: (words) =>
         set((state) => ({
           analytics: {
@@ -308,16 +335,14 @@ export const useStoryStore = create<StoryStore>()(
           },
         })),
 
-      // Preferences
       updatePreferences: (newPreferences) =>
         set((state) => ({
           preferences: { ...state.preferences, ...newPreferences },
         })),
 
-      // Utility
       getStoryWordCount: (storyId) => {
-        const story = get().stories.find(s => s.id === storyId);
-        if (!story) return 0;
+        const story = get().stories.find(s => String(s.id) === String(storyId));
+        if (!story || !story.paragraphs) return 0;
         return story.paragraphs.reduce(
           (total, paragraph) => total + paragraph.content.split(/\s+/).length,
           0
@@ -338,8 +363,7 @@ export const useStoryStore = create<StoryStore>()(
     {
       name: 'story-forge-storage',
       partialize: (state) => ({
-        stories: state.stories,
-        user: state.user,
+        // We only want to persist user preferences and analytics locally now, stories come from API
         analytics: state.analytics,
         preferences: state.preferences,
       }),
