@@ -4,6 +4,7 @@ namespace App\Controllers;
 
 use App\Models\User;
 use Firebase\JWT\JWT;
+use Illuminate\Database\Capsule\Manager as Capsule;
 use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
 
@@ -115,13 +116,108 @@ class AuthController extends BaseController
         return $this->success($response, $user);
     }
 
+    public function createGuestSession(Request $request, Response $response): Response
+    {
+        $now = time();
+        $guestId = 'guest_' . bin2hex(random_bytes(16));
+        $guestTag = substr(str_replace('-', '', $guestId), 0, 8);
+        $username = 'guest_' . $guestTag;
+
+        $payload = [
+            'sub' => $guestId,
+            'user_id' => $guestId,
+            'email' => '',
+            'username' => $username,
+            'display_name' => 'Guest Writer',
+            'role' => 'guest',
+            'auth_type' => 'guest',
+            'is_guest' => true,
+            'iat' => $now,
+            'nbf' => $now - 5,
+            'exp' => $now + (60 * 60 * 24 * 365),
+            'jti' => bin2hex(random_bytes(16)),
+        ];
+
+        $token = JWT::encode($payload, $this->jwtSecret, 'HS256');
+
+        return $this->success($response, [
+            'token' => $token,
+            'user' => [
+                'id' => $guestId,
+                'email' => '',
+                'display_name' => 'Guest Writer',
+                'username' => $username,
+                'role' => 'guest',
+                'is_verified' => false,
+                'is_guest' => true,
+                'auth_type' => 'guest',
+            ],
+        ], 'Guest session created', 201);
+    }
+
+    public function linkGuestAccount(Request $request, Response $response): Response
+    {
+        $user = $request->getAttribute('user');
+        if (!is_array($user) || empty($user['id'])) {
+            return $this->error($response, 'Authentication required', 401);
+        }
+
+        $currentUserId = trim((string) ($user['id'] ?? ''));
+        $currentRole = trim((string) ($user['role'] ?? 'user'));
+        $isCurrentGuest = (bool) ($user['is_guest'] ?? false)
+            || $currentRole === 'guest'
+            || str_starts_with($currentUserId, 'guest_');
+
+        if ($currentRole === 'admin') {
+            return $this->error($response, 'Guest and admin accounts cannot be linked', 403);
+        }
+
+        if ($isCurrentGuest) {
+            return $this->error($response, 'Guest destination is not allowed', 400);
+        }
+
+        $payload = $this->getRequestData($request);
+        $guestUserId = trim((string) ($payload['guest_user_id'] ?? ''));
+        if ($guestUserId === '' || !str_starts_with($guestUserId, 'guest_')) {
+            return $this->error($response, 'Invalid guest_user_id', 400);
+        }
+
+        if ($guestUserId === $currentUserId) {
+            return $this->error($response, 'Invalid transfer request', 400);
+        }
+
+        $movedByTable = [
+            'stories' => Capsule::table('stories')
+                ->where('created_by', $guestUserId)
+                ->update(['created_by' => $currentUserId]),
+            'paragraphs' => Capsule::table('paragraphs')
+                ->where('author_id', $guestUserId)
+                ->update(['author_id' => $currentUserId]),
+            'writing_samples' => Capsule::table('writing_samples')
+                ->where('user_id', $guestUserId)
+                ->update(['user_id' => $currentUserId]),
+        ];
+
+        return $this->success($response, [
+            'guest_user_id' => $guestUserId,
+            'linked_to_user_id' => $currentUserId,
+            'moved_rows_by_table' => $movedByTable,
+            'total_moved_rows' => array_sum($movedByTable),
+        ], 'Guest account data linked successfully');
+    }
+
     private function createToken(User $user): string
     {
         $now = time();
         $payload = [
             'sub' => (string) $user->id,
+            'user_id' => (string) $user->id,
             'email' => (string) $user->email,
+            'username' => (string) $user->username,
+            'display_name' => (string) $user->display_name,
             'role' => (string) $user->role,
+            'auth_type' => 'frontpage',
+            'is_guest' => false,
             'iat' => $now,
             'exp' => $now + $this->jwtExpiration,
         ];
@@ -138,6 +234,8 @@ class AuthController extends BaseController
             'username' => (string) $user->username,
             'role' => (string) $user->role,
             'is_verified' => (bool) $user->is_verified,
+            'is_guest' => false,
+            'auth_type' => 'frontpage',
             'created_at' => (string) $user->created_at,
             'updated_at' => (string) $user->updated_at,
         ];

@@ -29,9 +29,9 @@
             "@putenv COMPOSER_PROCESS_TIMEOUT=0",
             "php -S localhost:8001 -t public/"
         ],
-        "test": "phpunit",
-        "cs-check": "phpcs --standard=PSR12 src/ tests/",
-        "cs-fix": "phpcbf --standard=PSR12 src/ tests/"
+        "test": "../../../vendor/bin/phpunit -c phpunit.xml",
+        "cs-check": "../../../vendor/bin/phpcs --standard=PSR12 src/ tests/",
+        "cs-fix": "../../../vendor/bin/phpcbf --standard=PSR12 src/ tests/"
     },
     "config": {
         "process-timeout": 0

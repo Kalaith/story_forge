@@ -8,7 +8,7 @@ use Illuminate\Database\Capsule\Manager as Capsule;
 use Slim\Factory\AppFactory;
 
 $autoloadCandidates = [
-    __DIR__ . '/../../../vendor/autoload.php',
+    __DIR__ . '/../../../../vendor/autoload.php',
     __DIR__ . '/../vendor/autoload.php',
 ];
 

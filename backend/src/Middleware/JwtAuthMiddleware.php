@@ -99,7 +99,9 @@ class JwtAuthMiddleware implements MiddlewareInterface
         $email = $this->extractClaimString($claims, 'email') ?? '';
         $username = $this->extractClaimString($claims, 'username') ?? ($email ? explode('@', $email)[0] : 'user');
         $displayName = $this->extractClaimString($claims, 'display_name') ?? $username;
-        $role = $this->normalizeRole($this->extractClaimString($claims, 'role'));
+        $authType = $this->extractClaimString($claims, 'auth_type') ?? 'frontpage';
+        $isGuest = $this->extractClaimBool($claims, 'is_guest') || $authType === 'guest';
+        $role = $this->normalizeRole($this->extractClaimString($claims, 'role'), $isGuest);
         $id = $frontpageUserId ?: $subject;
 
         if (!$id) {
@@ -112,7 +114,9 @@ class JwtAuthMiddleware implements MiddlewareInterface
             'display_name' => $displayName,
             'username' => $username,
             'role' => $role,
-            'is_verified' => true,
+            'is_verified' => !$isGuest,
+            'is_guest' => $isGuest,
+            'auth_type' => $isGuest ? 'guest' : 'frontpage',
         ];
     }
 
@@ -121,11 +125,17 @@ class JwtAuthMiddleware implements MiddlewareInterface
         $subject = $this->extractClaimString($claims, 'sub');
         $frontpageUserId = $this->extractClaimString($claims, 'user_id');
         $email = $this->extractClaimString($claims, 'email');
-        $role = $this->normalizeRole($this->extractClaimString($claims, 'role'));
+        $authType = $this->extractClaimString($claims, 'auth_type') ?? 'frontpage';
+        $isGuest = $this->extractClaimBool($claims, 'is_guest') || $authType === 'guest';
+        $role = $this->normalizeRole($this->extractClaimString($claims, 'role'), $isGuest);
         $displayName =
             $this->extractClaimString($claims, 'display_name')
             ?? $this->extractClaimString($claims, 'username')
             ?? ($email ? explode('@', $email)[0] : 'User');
+
+        if ($isGuest) {
+            return null;
+        }
 
         $candidateAuthIds = [];
         if ($subject) {
@@ -230,8 +240,34 @@ class JwtAuthMiddleware implements MiddlewareInterface
         return null;
     }
 
-    private function normalizeRole(?string $role): string
+    private function extractClaimBool(object $claims, string $key): bool
     {
+        if (!isset($claims->{$key})) {
+            return false;
+        }
+
+        $value = $claims->{$key};
+        if (is_bool($value)) {
+            return $value;
+        }
+
+        if (is_string($value)) {
+            return in_array(strtolower(trim($value)), ['1', 'true', 'yes'], true);
+        }
+
+        if (is_numeric($value)) {
+            return (int) $value === 1;
+        }
+
+        return false;
+    }
+
+    private function normalizeRole(?string $role, bool $isGuest = false): string
+    {
+        if ($isGuest) {
+            return 'guest';
+        }
+
         if ($role === 'admin' || $role === 'dm' || $role === 'user') {
             return $role;
         }

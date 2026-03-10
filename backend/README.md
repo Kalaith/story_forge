@@ -40,7 +40,7 @@ Copy `.env.example` to `.env` and set:
 ## Local Run
 
 ```bash
-composer install
+composer install --working-dir=../../..
 mysql -u root -p < database/init.sql
 php -S localhost:8001 -t public/
 ```

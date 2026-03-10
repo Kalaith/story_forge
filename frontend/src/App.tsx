@@ -10,7 +10,7 @@ import StoryManagementPage from './pages/StoryManagementPage';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 
 const Navbar: React.FC = () => {
-  const { isAuthenticated, user, loginWithRedirect, logout } = useAuth();
+  const { isAuthenticated, user, loginWithRedirect, continueAsGuest, getLinkAccountUrl, logout } = useAuth();
 
   return (
     <nav className="navbar">
@@ -24,11 +24,22 @@ const Navbar: React.FC = () => {
             {isAuthenticated ? (
               <div className="flex gap-4 items-center">
                 <span className="text-secondary">{user?.display_name || user?.username}</span>
+                {user?.is_guest && (
+                  <>
+                    <span className="text-secondary">Guest</span>
+                    <a className="btn btn--secondary btn--sm" href={getLinkAccountUrl()}>
+                      Link Account
+                    </a>
+                  </>
+                )}
                 <Link to="/dashboard" className="btn btn--primary btn--sm">Dashboard</Link>
                 <button className="btn btn--secondary btn--sm" onClick={logout}>Sign Out</button>
               </div>
             ) : (
-              <button className="btn btn--primary btn--sm" onClick={loginWithRedirect}>Sign In</button>
+              <div className="flex gap-2 items-center">
+                <button className="btn btn--secondary btn--sm" onClick={continueAsGuest}>Continue as Guest</button>
+                <button className="btn btn--primary btn--sm" onClick={loginWithRedirect}>Sign In</button>
+              </div>
             )}
           </div>
         </div>

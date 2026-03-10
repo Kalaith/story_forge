@@ -24,8 +24,10 @@ return function (App $app) {
     $app->group('/auth', function (RouteCollectorProxy $auth) {
         $auth->post('/login', [AuthController::class, 'login']);
         $auth->post('/register', [AuthController::class, 'register']);
+        $auth->post('/guest-session', [AuthController::class, 'createGuestSession']);
         $auth->get('/current-user', [AuthController::class, 'currentUser'])->add(new JwtAuthMiddleware());
         $auth->get('/validate-session', [AuthController::class, 'currentUser'])->add(new JwtAuthMiddleware());
+        $auth->post('/link-guest', [AuthController::class, 'linkGuestAccount'])->add(new JwtAuthMiddleware());
     });
 
     // Public read routes used by homepage and story reading.
