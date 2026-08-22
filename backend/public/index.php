@@ -104,17 +104,8 @@ $errorHandler->forceContentType('application/json');
 $errorHandler->registerErrorRenderer('application/json', static function ($exception, bool $display) {
     $payload = [
         'success' => false,
-        'message' => $exception->getMessage(),
+        'message' => 'An unexpected server error occurred.',
     ];
-
-    if ($display) {
-        $payload['details'] = [
-            'type' => get_class($exception),
-            'code' => $exception->getCode(),
-            'file' => $exception->getFile(),
-            'line' => $exception->getLine(),
-        ];
-    }
 
     return json_encode($payload, JSON_PRETTY_PRINT);
 });

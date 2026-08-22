@@ -77,6 +77,10 @@ interface StoryActions {
 
 type StoryStore = StoryState & StoryActions;
 
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : 'The request failed.';
+}
+
 const defaultAnalytics: WritingAnalytics = {
   dailyWordCount: 0,
   weeklyProgress: [0, 0, 0, 0, 0, 0, 0],
@@ -114,8 +118,8 @@ export const useStoryStore = create<StoryStore>()(
         try {
           const stories = await storyApi.list() as Story[];
           set({ stories, isLoading: false });
-        } catch (error: any) {
-          set({ error: error.message, isLoading: false });
+        } catch (error: unknown) {
+          set({ error: getErrorMessage(error), isLoading: false });
         }
       },
 
@@ -124,8 +128,8 @@ export const useStoryStore = create<StoryStore>()(
         try {
           const story = await storyApi.get(storyId) as Story;
           set({ currentStory: story, isLoading: false });
-        } catch (error: any) {
-          set({ error: error.message, isLoading: false });
+        } catch (error: unknown) {
+          set({ error: getErrorMessage(error), isLoading: false });
         }
       },
 
@@ -138,8 +142,8 @@ export const useStoryStore = create<StoryStore>()(
             currentStory: newStory,
             isLoading: false
           }));
-        } catch (error: any) {
-          set({ error: error.message, isLoading: false });
+        } catch (error: unknown) {
+          set({ error: getErrorMessage(error), isLoading: false });
           throw error;
         }
       },
@@ -147,14 +151,14 @@ export const useStoryStore = create<StoryStore>()(
       updateStory: async (storyId, updates) => {
         set({ isLoading: true, error: null });
         try {
-          const updatedStory = await storyApi.update(storyId, updates as any) as Story;
+          const updatedStory = await storyApi.update(storyId, updates) as Story;
           set((state) => ({
             stories: state.stories.map(s => s.id === updatedStory.id ? updatedStory : s),
             currentStory: state.currentStory?.id === updatedStory.id ? updatedStory : state.currentStory,
             isLoading: false
           }));
-        } catch (error: any) {
-          set({ error: error.message, isLoading: false });
+        } catch (error: unknown) {
+          set({ error: getErrorMessage(error), isLoading: false });
           throw error;
         }
       },
@@ -169,8 +173,8 @@ export const useStoryStore = create<StoryStore>()(
             writingSamples: state.writingSamples.filter(ws => String(ws.storyId) !== String(storyId)),
             isLoading: false
           }));
-        } catch (error: any) {
-          set({ error: error.message, isLoading: false });
+        } catch (error: unknown) {
+          set({ error: getErrorMessage(error), isLoading: false });
           throw error;
         }
       },
@@ -192,8 +196,8 @@ export const useStoryStore = create<StoryStore>()(
               isLoading: false
             };
           });
-        } catch (error: any) {
-          set({ error: error.message, isLoading: false });
+        } catch (error: unknown) {
+          set({ error: getErrorMessage(error), isLoading: false });
           throw error;
         }
       },
@@ -215,8 +219,8 @@ export const useStoryStore = create<StoryStore>()(
               isLoading: false
             };
           });
-        } catch (error: any) {
-          set({ error: error.message, isLoading: false });
+        } catch (error: unknown) {
+          set({ error: getErrorMessage(error), isLoading: false });
           throw error;
         }
       },
@@ -230,8 +234,8 @@ export const useStoryStore = create<StoryStore>()(
         try {
           const writingSamples = await writingSampleApi.getByStory(storyId) as WritingSample[];
           set({ writingSamples, isLoading: false });
-        } catch (error: any) {
-          set({ error: error.message, isLoading: false });
+        } catch (error: unknown) {
+          set({ error: getErrorMessage(error), isLoading: false });
         }
       },
 
@@ -243,8 +247,8 @@ export const useStoryStore = create<StoryStore>()(
             writingSamples: [...state.writingSamples, newSample],
             isLoading: false
           }));
-        } catch (error: any) {
-          set({ error: error.message, isLoading: false });
+        } catch (error: unknown) {
+          set({ error: getErrorMessage(error), isLoading: false });
           throw error;
         }
       },
@@ -257,8 +261,8 @@ export const useStoryStore = create<StoryStore>()(
             writingSamples: state.writingSamples.map(ws => String(ws.id) === String(sampleId) ? updatedSample : ws),
             isLoading: false
           }));
-        } catch (error: any) {
-          set({ error: error.message, isLoading: false });
+        } catch (error: unknown) {
+          set({ error: getErrorMessage(error), isLoading: false });
           throw error;
         }
       },

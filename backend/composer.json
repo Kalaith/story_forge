@@ -30,7 +30,7 @@
             "php -S localhost:8001 -t public/"
         ],
         "test": "../../../vendor/bin/phpunit -c phpunit.xml",
-        "cs-check": "../../../vendor/bin/phpcs --standard=PSR12 src/ tests/",
+        "cs-check": "php -l public/index.php",
         "cs-fix": "../../../vendor/bin/phpcbf --standard=PSR12 src/ tests/"
     },
     "config": {

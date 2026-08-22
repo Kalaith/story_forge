@@ -1,12 +1,8 @@
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
-if (!API_BASE_URL) {
-  throw new Error('Missing required VITE_API_BASE_URL');
-}
+import { ApiError as SharedApiError, createApiClient } from '@webhatchery/api-client';
 
-interface ApiResponse<T> {
-  success: boolean;
-  message: string;
-  data: T;
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
+if (!API_BASE_URL?.trim()) {
+  throw new Error('Missing required VITE_API_BASE_URL');
 }
 
 interface BackendUser {
@@ -69,72 +65,50 @@ class ApiError extends Error {
 
 let getAccessToken: (() => Promise<string>) | null = null;
 
+const sharedApiClient = createApiClient({
+  baseURL: API_BASE_URL,
+  preserveEnvelope: false,
+  tokenProvider: async () => {
+    if (!getAccessToken) {
+      return null;
+    }
+    return getAccessToken();
+  },
+});
+
 export function setTokenProvider(provider: () => Promise<string>) {
   getAccessToken = provider;
 }
 
-async function getAuthHeaders(): Promise<Record<string, string>> {
+function requireAuthProvider(): void {
   if (!getAccessToken) {
     throw new Error('Token provider not set. Make sure auth context is initialized.');
   }
-
-  try {
-    const token = await getAccessToken();
-    return { Authorization: `Bearer ${token}` };
-  } catch (error) {
-    console.error('Failed to get access token:', error);
-    throw new Error('Failed to get authentication token');
-  }
-}
-
-async function parseApiResponse<T>(response: Response): Promise<T> {
-  const raw = await response.text();
-  let result: ApiResponse<T> | null = null;
-
-  try {
-    result = raw ? (JSON.parse(raw) as ApiResponse<T>) : null;
-  } catch {
-    throw new ApiError(response.status, 'Invalid JSON response from API');
-  }
-
-  if (!result || !result.success) {
-    throw new ApiError(response.status, result?.message || 'API request failed');
-  }
-
-  return result.data;
 }
 
 async function apiRequestPublic<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
-  const url = `${API_BASE_URL}${endpoint}`;
-
   try {
-    const response = await fetch(url, {
-      ...options,
+    return await sharedApiClient.request<T>(endpoint, {
+      method: options.method ?? 'GET',
       headers: {
-        'Content-Type': 'application/json',
         ...options.headers,
       },
+      body: options.body,
     });
-
-    return await parseApiResponse<T>(response);
   } catch (error) {
     if (error instanceof ApiError) {
       throw error;
+    }
+    if (error instanceof SharedApiError) {
+      throw new ApiError(error.status, error.message);
     }
     throw new ApiError(0, error instanceof Error ? error.message : 'Network error');
   }
 }
 
 async function apiRequestPrivate<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
-  const authHeaders = await getAuthHeaders();
-
-  return apiRequestPublic<T>(endpoint, {
-    ...options,
-    headers: {
-      ...authHeaders,
-      ...options.headers,
-    },
-  });
+  requireAuthProvider();
+  return apiRequestPublic<T>(endpoint, options);
 }
 
 function toDateOnly(value?: string): string {
@@ -204,13 +178,7 @@ export const storyApi = {
 
   async update(
     id: string,
-    updates: Partial<{
-      title: string;
-      genre: string;
-      description: string;
-      accessLevel: string;
-      requireExamples: boolean;
-    }>
+    updates: unknown
   ): Promise<unknown> {
     return apiRequestPrivate<unknown>(`/stories/${id}`, {
       method: 'PUT',
