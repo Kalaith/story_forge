@@ -281,10 +281,21 @@ class JwtAuthMiddleware implements MiddlewareInterface
             'success' => false,
             'message' => $message,
             'error' => 'Authentication required',
+            'login_url' => $this->requiredLoginUrl(),
         ]));
 
         return $response
             ->withHeader('Content-Type', 'application/json')
             ->withStatus(401);
+    }
+
+    private function requiredLoginUrl(): string
+    {
+        $value = trim((string) ($_ENV['WEBHATCHERY_LOGIN_URL'] ?? ''));
+        if ($value === '') {
+            throw new \RuntimeException('WEBHATCHERY_LOGIN_URL environment variable is not set');
+        }
+
+        return $value;
     }
 }

@@ -7,10 +7,22 @@ use Dotenv\Dotenv;
 use Illuminate\Database\Capsule\Manager as Capsule;
 use Slim\Factory\AppFactory;
 
-$autoloadCandidates = [
-    __DIR__ . '/../../../../vendor/autoload.php',
-    __DIR__ . '/../vendor/autoload.php',
-];
+$autoloadCandidates = [];
+$searchDir = __DIR__;
+for ($i = 0; $i < 8; $i++) {
+    $candidate = $searchDir . '/vendor/autoload.php';
+    if (file_exists($candidate)) {
+        $autoloadCandidates[] = $candidate;
+        break;
+    }
+
+    $parent = dirname($searchDir);
+    if ($parent === $searchDir) {
+        break;
+    }
+    $searchDir = $parent;
+}
+$autoloadCandidates[] = __DIR__ . '/../vendor/autoload.php';
 
 $autoloader = null;
 foreach ($autoloadCandidates as $candidate) {
